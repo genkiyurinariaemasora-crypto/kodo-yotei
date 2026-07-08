@@ -283,6 +283,8 @@ async function startAppWithName(name){
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('header-name').textContent=`氏名：${name}`;
   setSyncStatus('','● 接続中...');
+  // 月ラベルを即時表示
+  document.getElementById('month-label').textContent=`${currentYear}年${currentMonth}月`;
   await loadFromFirebase(name);
   renderAll();
 }
