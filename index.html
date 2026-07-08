@@ -125,9 +125,9 @@
 <main>
   <div class="nav-row">
     <div class="month-nav">
-      <button onclick="changeMonth(-1)" id="btn-prev">‹</button>
+      <button id="btn-prev">‹</button>
       <span class="month-label" id="month-label"></span>
-      <button onclick="changeMonth(1)" id="btn-next">›</button>
+      <button id="btn-next">›</button>
     </div>
     <div class="period-btns">
       <button class="pbtn active" id="pb-first" onclick="setPeriod('first')">前半（1〜15日）</button>
@@ -472,17 +472,23 @@ function setPeriod(p){
   document.getElementById('pb-second').classList.toggle('active',p==='second');
   renderAll();
 }
-let monthChanging=false;
 function changeMonth(d){
-  if(monthChanging) return;
-  monthChanging=true;
   currentMonth+=d;
   if(currentMonth>12){currentMonth=1;currentYear++;}
   if(currentMonth<1){currentMonth=12;currentYear--;}
   selectedDay=null;renderAll();
-  setTimeout(()=>{ monthChanging=false; }, 300);
 }
 function renderAll(){renderCal();renderEditor();renderPreview();}
+
+// 月ボタンのイベントリスナー（重複登録を防ぐためDOMContentLoadedで1回だけ）
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-prev').addEventListener('click', function(e){
+    e.preventDefault(); e.stopPropagation(); changeMonth(-1);
+  });
+  document.getElementById('btn-next').addEventListener('click', function(e){
+    e.preventDefault(); e.stopPropagation(); changeMonth(1);
+  });
+});
 
 function toast(msg){
   const el=document.getElementById('toast');
