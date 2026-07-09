@@ -316,6 +316,20 @@ function setPlan(d,v){
   if(v) state.plans[pkey(d)]=v; else delete state.plans[pkey(d)];
   saveToFirebase(); saveLocalBackup();
 }
+function getTime(d){return state.times ? (state.times[pkey(d)]||{start:'',end:''}) : {start:'',end:''};}
+function setTime(d,start,end){
+  if(!state.times) state.times={};
+  if(start||end) state.times[pkey(d)]={start,end};
+  else delete state.times[pkey(d)];
+  saveToFirebase(); saveLocalBackup();
+}
+function formatPlanWithTime(plan, time){
+  if(!plan) return '';
+  if(!time || (!time.start && !time.end)) return plan;
+  if(time.start && time.end) return plan + ' ' + time.start + '〜' + time.end;
+  if(time.start) return plan + ' ' + time.start + '〜';
+  return plan;
+}
 function getSel(d){const p=getPlan(d);return p?p.split('/'):[]}
 
 function toggle(d,item,single){
