@@ -60,6 +60,10 @@
   .dc.sel{border:2px solid var(--cyan);background:#0c2a3a}
   .dc.sun .dn{color:#f87171}.dc.sat .dn{color:#60a5fa}
   .dn{font-size:11px;font-weight:700;color:var(--text2)}
+  .dpv{font-size:9px;color:#fbbf24;margin-top:2px;line-height:1.35;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .priv-box{margin-top:14px;padding:10px 12px;border:1px dashed #b45309;border-radius:var(--radius-sm);background:#1f1a10}
+  .priv-box textarea{width:100%;min-height:54px;border:1px solid var(--border);background:var(--bg3);color:var(--text);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical}
+  .pi.priv{color:#fbbf24}
   .dp{font-size:9px;color:var(--text);margin-top:2px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
   .editor{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}
   .editor-title{font-size:14px;font-weight:700;margin-bottom:4px}
@@ -208,7 +212,7 @@ let state={name:'',plans:{},customs:[]};
 let currentYear=new Date().getFullYear();
 let currentMonth=new Date().getMonth()+1;
 let selectedDay=null;
-let period='first';
+let period=new Date().getDate()<=15?'first':'second';
 let firebaseReady=false;
 let saveTimer=null;
 
@@ -237,6 +241,7 @@ async function loadFromFirebase(name){
       state.plans = data.plans || {};
       state.customs = data.customs || [];
       state.times = data.times || {};
+      state.privates = data.privates || {};
     } else {
       state.plans = {};
       state.customs = [];
@@ -259,6 +264,7 @@ function saveToFirebase(){
         plans: state.plans,
         customs: state.customs,
         times: state.times||{},
+        privates: state.privates||{},
         updatedAt: Date.now()
       });
       setSyncStatus('ok','● 同期済み');
@@ -315,6 +321,12 @@ function pkey(d){return`${currentYear}-${currentMonth}-${d}`}
 function getPlan(d){return state.plans[pkey(d)]||''}
 function setPlan(d,v){
   if(v) state.plans[pkey(d)]=v; else delete state.plans[pkey(d)];
+  saveToFirebase(); saveLocalBackup();
+}
+function getPrivate(d){return (state.privates&&state.privates[pkey(d)])||'';}
+function setPrivate(d,v){
+  if(!state.privates) state.privates={};
+  if(v) state.privates[pkey(d)]=v; else delete state.privates[pkey(d)];
   saveToFirebase(); saveLocalBackup();
 }
 function getTime(d){return state.times ? (state.times[pkey(d)]||{start:'',end:''}) : {start:'',end:''};}
@@ -385,6 +397,8 @@ function renderCal(){
     el.className=c;
     const dn=document.createElement('div');dn.className='dn';dn.textContent=d;el.appendChild(dn);
     if(p){const dp=document.createElement('div');dp.className='dp';const t=getTime(d);dp.textContent=formatPlanWithTime(p,t);el.appendChild(dp);}
+    const pv=getPrivate(d);
+    if(pv&&active){const dv=document.createElement('div');dv.className='dpv';dv.textContent='🔒'+pv;el.appendChild(dv);}
     if(active)el.onclick=()=>selectDay(d);
     cal.appendChild(el);
   }
@@ -446,11 +460,14 @@ function renderEditor(){
       <button onclick="clearTime(${selectedDay})" style="border:1px solid var(--border);background:transparent;color:var(--text2);border-radius:var(--radius-sm);padding:6px 10px;cursor:pointer;font-size:12px;font-family:inherit">時間クリア</button>
     </div>`;
   }
+  html+=`<div class="priv-box"><p class="section-label" style="margin-top:0;color:#fbbf24">🔒 プライベート（提出には含まれません）</p>
+    <textarea id="priv-inp" placeholder="自分用のメモ（例：歯医者 18時、子どもの行事 など）" oninput="savePrivate(${selectedDay})"></textarea></div>`;
   const btns=[];
   if(sel.length)btns.push(`<button class="undo-btn" onclick="doUndo(${selectedDay})">← 最後を取り消し</button>`);
   if(current)btns.push(`<button class="clear-btn" onclick="doClear(${selectedDay})">✕ クリア</button>`);
   if(btns.length)html+=`<div class="btn-row">${btns.join('')}</div>`;
   document.getElementById('editor-body').innerHTML=html;
+  document.getElementById('priv-inp').value=getPrivate(selectedDay);
 }
 
 function renderPreview(){
@@ -461,10 +478,20 @@ function renderPreview(){
   const name=state.name?`【${state.name}】 `:'';
   document.getElementById('preview-title').textContent=`${name}${currentYear}年${currentMonth}月 行動予定（${lbl}）`;
   let html='';let any=false;
-  for(let d=start;d<=end;d++){const p=getPlan(d);if(p){any=true;const t=getTime(d);html+=`<div class="pi"><span class="pd">${currentMonth}/${d}</span><span>${formatPlanWithTime(p,t)}</span></div>`;}}
+  const esc=s=>s.replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  let anyPriv=false;
+  for(let d=start;d<=end;d++){const p=getPlan(d);const pv=getPrivate(d);
+    if(p){any=true;const t=getTime(d);html+=`<div class="pi"><span class="pd">${currentMonth}/${d}</span><span>${esc(formatPlanWithTime(p,t))}</span></div>`;}
+    if(pv){any=true;anyPriv=true;html+=`<div class="pi priv"><span class="pd">${p?'':currentMonth+'/'+d}</span><span>🔒 ${esc(pv)}</span></div>`;}
+  }
+  if(anyPriv) html+='<p style="font-size:11px;color:var(--text2);margin-top:6px">※🔒はプライベートです。コピー・Excel・PDFには含まれません</p>';
   document.getElementById('preview-list').innerHTML=any?html:'<p style="font-size:13px;color:var(--text2)">この期間の予定はまだありません</p>';
 }
 
+function savePrivate(d){
+  setPrivate(d,(document.getElementById('priv-inp')?.value||'').trim());
+  renderCal(); renderPreview();
+}
 function saveTime(d){
   const start = document.getElementById('time-start')?.value||'';
   const end   = document.getElementById('time-end')?.value||'';
@@ -494,9 +521,16 @@ function changeMonth(d){
   currentMonth+=d;
   if(currentMonth>12){currentMonth=1;currentYear++;}
   if(currentMonth<1){currentMonth=12;currentYear--;}
+  const now=new Date();
+  const isThisMonth=(currentYear===now.getFullYear()&&currentMonth===now.getMonth()+1);
+  period=isThisMonth?(now.getDate()<=15?'first':'second'):'first';
   selectedDay=null;renderAll();
 }
-function renderAll(){renderCal();renderEditor();renderPreview();}
+function syncPeriodBtns(){
+  document.getElementById('pb-first').classList.toggle('active',period==='first');
+  document.getElementById('pb-second').classList.toggle('active',period==='second');
+}
+function renderAll(){syncPeriodBtns();renderCal();renderEditor();renderPreview();}
 
 
 function toast(msg){
