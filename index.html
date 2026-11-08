@@ -59,6 +59,9 @@
   .dc.special .dn{color:#93c5fd}.dc.special .dp{color:#bfdbfe}
   .dc.sel{border:2px solid var(--cyan);background:#0c2a3a}
   .dc.sun .dn{color:#f87171}.dc.sat .dn{color:#60a5fa}
+  .dc.hol{box-shadow:inset 0 3px 0 #f472b6}
+  .dc.hol .dn{color:#f472b6 !important}
+  .dh-name{font-size:8px;color:#f9a8d4;font-weight:600;margin-top:1px;line-height:1.2;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   .dn{font-size:11px;font-weight:700;color:var(--text2)}
   .dpv{font-size:9px;color:#fbbf24;margin-top:2px;line-height:1.35;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   .priv-box{margin-top:14px;padding:10px 12px;border:1px dashed #b45309;border-radius:var(--radius-sm);background:#1f1a10}
@@ -149,6 +152,7 @@
   <div class="legend">
     <span><span class="dot" style="background:#14532d;border:1px solid #166534"></span>予定あり</span>
     <span><span class="dot" style="background:#7f1d1d;border:1px solid #991b1b"></span>公休</span>
+    <span><span class="dot" style="background:transparent;border:1px solid #f472b6;box-shadow:inset 0 2px 0 #f472b6"></span><span style="color:#f472b6">祝日</span></span>
     <span><span class="dot" style="background:#1e3a8a;border:1px solid #2563eb"></span>会議/本社/報告会</span>
     <span><span class="dot" style="background:#0c2a3a;border:1px solid #0ea5e9"></span>選択中</span>
   </div>
@@ -400,6 +404,37 @@ function addCustom(s){
 function removeCustom(s){state.customs=state.customs.filter(x=>x!==s);saveToFirebase();saveLocalBackup();}
 
 function dim(y,m){return new Date(y,m,0).getDate()}
+const _holCache={};
+function jpHolidays(y){
+  if(_holCache[y]) return _holCache[y];
+  const h={};
+  const add=(m,d,n)=>{h[m+'-'+d]=n;};
+  const nthMon=(m,n)=>{const f=new Date(y,m-1,1).getDay();return 1+((8-f)%7)+(n-1)*7;};
+  add(1,1,'元日'); add(1,nthMon(1,2),'成人の日');
+  add(2,11,'建国記念の日'); add(2,23,'天皇誕生日');
+  add(3,Math.floor(20.8431+0.242194*(y-1980)-Math.floor((y-1980)/4)),'春分の日');
+  add(4,29,'昭和の日'); add(5,3,'憲法記念日'); add(5,4,'みどりの日'); add(5,5,'こどもの日');
+  add(7,nthMon(7,3),'海の日'); add(8,11,'山の日'); add(9,nthMon(9,3),'敬老の日');
+  add(9,Math.floor(23.2488+0.242194*(y-1980)-Math.floor((y-1980)/4)),'秋分の日');
+  add(10,nthMon(10,2),'スポーツの日'); add(11,3,'文化の日'); add(11,23,'勤労感謝の日');
+  // 国民の休日（祝日に挟まれた平日）
+  for(let m=1;m<=12;m++)for(let d=2;d<=dim(y,m)-1;d++){
+    const k=m+'-'+d;if(h[k])continue;
+    const dt=new Date(y,m-1,d);if(dt.getDay()===0)continue;
+    const pv=new Date(y,m-1,d-1),nx=new Date(y,m-1,d+1);
+    if(h[(pv.getMonth()+1)+'-'+pv.getDate()]&&h[(nx.getMonth()+1)+'-'+nx.getDate()])h[k]='国民の休日';
+  }
+  // 振替休日（日曜の祝日→次の平日）
+  Object.keys(h).forEach(k=>{
+    const [m,d]=k.split('-').map(Number);
+    if(new Date(y,m-1,d).getDay()!==0)return;
+    let t=new Date(y,m-1,d+1);
+    while(h[(t.getMonth()+1)+'-'+t.getDate()])t=new Date(t.getFullYear(),t.getMonth(),t.getDate()+1);
+    h[(t.getMonth()+1)+'-'+t.getDate()]='振替休日';
+  });
+  return _holCache[y]=h;
+}
+function holidayName(y,m,d){return jpHolidays(y)[m+'-'+d]||'';}
 function dow(y,m,d){return new Date(y,m-1,d).getDay()}
 function inPeriod(d){return period==='first'?d<=15:d>=16;}
 function calCls(p){
@@ -429,10 +464,12 @@ function renderCal(){
     const p=getPlan(d);
     const active=inPeriod(d);
     let c='dc'+(active?calCls(p):' out');
-    if(active){if(w===0)c+=' sun';else if(w===6)c+=' sat';}
+    const hn=holidayName(currentYear,currentMonth,d);
+    if(active){if(w===0)c+=' sun';else if(w===6)c+=' sat';if(hn)c+=' hol';}
     if(selectedDay===d&&active)c+=' sel';
     el.className=c;
     const dn=document.createElement('div');dn.className='dn';dn.textContent=d;el.appendChild(dn);
+    if(hn&&active){const hx=document.createElement('div');hx.className='dh-name';hx.textContent=hn;el.appendChild(hx);}
     if(p){const dp=document.createElement('div');dp.className='dp';dp.textContent=planText(d);el.appendChild(dp);}
     const pv=getPrivate(d);
     if(pv&&active){const dv=document.createElement('div');dv.className='dpv';dv.textContent='🔒'+pv;el.appendChild(dv);}
@@ -453,7 +490,8 @@ function renderEditor(){
     return;
   }
   const w=dow(currentYear,currentMonth,selectedDay);
-  document.getElementById('editor-title').textContent=`${currentMonth}月${selectedDay}日（${dowN[w]}）`;
+  const hnE=holidayName(currentYear,currentMonth,selectedDay);
+  document.getElementById('editor-title').textContent=`${currentMonth}月${selectedDay}日（${dowN[w]}）${hnE?'　🎌'+hnE:''}`;
   const current=getPlan(selectedDay);
   const sel=getSel(selectedDay);
   document.getElementById('current-val').textContent=current?`▶ ${planText(selectedDay)}`:'（未選択）';
@@ -629,9 +667,10 @@ function doExcel(){
     const p=getPlan(d);
     const pWithTime=planText(d);
     const w=dow(currentYear,currentMonth,d);
-    const dowLabel=['（日）','（月）','（火）','（水）','（木）','（金）','（土）'][w];
+    const hnX=holidayName(currentYear,currentMonth,d);
+    const dowLabel='（'+['日','月','火','水','木','金','土'][w]+(hnX?'・'+hnX:'')+'）';
     const isHoliday=p==='公休';
-    const isWeekend=(w===0||w===6),isSun=w===0,isSat=w===6;
+    const isWeekend=(w===0||w===6||!!hnX),isSun=(w===0||!!hnX),isSat=(w===6&&!hnX);
     const bgColor=isHoliday?'FEE2E2':isWeekend?(isSun?'FFF5F5':'EFF6FF'):(rowNum%2===0?'F8FAFF':'FFFFFF');
     const dayColor=isHoliday?'991B1B':isSun?'DC2626':isSat?'1D4ED8':'111827';
     ws[`A${rowNum}`]={v:`${d}日${dowLabel}`,t:'s',s:{font:{sz:11,bold:isHoliday,color:{rgb:dayColor}},fill:{fgColor:{rgb:bgColor}},alignment:{horizontal:'center',vertical:'center'},border:{top:{style:'thin',color:{rgb:'E2E8F0'}},bottom:{style:'thin',color:{rgb:'E2E8F0'}},left:{style:'thin',color:{rgb:'E2E8F0'}},right:{style:'thin',color:{rgb:'E2E8F0'}}}}};
@@ -639,7 +678,7 @@ function doExcel(){
     rowNum++;
   }
   ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:1}},{s:{r:1,c:0},e:{r:1,c:1}}];
-  ws['!cols']=[{wch:16},{wch:36}];
+  ws['!cols']=[{wch:22},{wch:40}];
   ws['!rows']=[{hpt:28},{hpt:22},{hpt:20}];
   for(let i=3;i<rowNum;i++) ws['!rows'].push({hpt:20});
   ws['!ref']=`A1:B${rowNum-1}`;
@@ -660,9 +699,10 @@ function doPdf(){
     const p=getPlan(d);
     const pWithTime=planText(d);
     const w=dow(currentYear,currentMonth,d);
-    const isSun=w===0,isSat=w===6,isHoliday=p==='公休';
+    const hnP=holidayName(currentYear,currentMonth,d);
+    const isSun=(w===0||!!hnP),isSat=(w===6&&!hnP),isHoliday=p==='公休';
     const cls=isHoliday?'holiday':isSun?'sun':isSat?'sat':'';
-    rows+=`<tr class="${cls}"><td>${d}日（${dowN[w]}）</td><td>${pWithTime||''}</td></tr>`;
+    rows+=`<tr class="${cls}"><td>${d}日（${dowN[w]}${hnP?'・'+hnP:''}）</td><td>${pWithTime||''}</td></tr>`;
   }
   const html=`<!DOCTYPE html><html lang="ja"><head>
 <meta charset="UTF-8"><title>行動予定表</title>
