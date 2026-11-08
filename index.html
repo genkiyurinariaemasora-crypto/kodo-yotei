@@ -469,7 +469,7 @@ function renderCal(){
     if(selectedDay===d&&active)c+=' sel';
     el.className=c;
     const dn=document.createElement('div');dn.className='dn';dn.textContent=d;el.appendChild(dn);
-    if(hn&&active){const hx=document.createElement('div');hx.className='dh-name';hx.textContent=hn;el.appendChild(hx);}
+    if(hn&&active){const hx=document.createElement('div');hx.className='dh-name';hx.textContent='祝';hx.title=hn;el.appendChild(hx);}
     if(p){const dp=document.createElement('div');dp.className='dp';dp.textContent=planText(d);el.appendChild(dp);}
     const pv=getPrivate(d);
     if(pv&&active){const dv=document.createElement('div');dv.className='dpv';dv.textContent='🔒'+pv;el.appendChild(dv);}
